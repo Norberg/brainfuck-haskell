@@ -2,7 +2,6 @@ SRC=$(wildcard *.hs)
 
 default:
 	ghc compiler.hs -o compiler
-	ghc state.hs -o state
 
 run:
 	./compiler	
