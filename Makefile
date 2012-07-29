@@ -10,6 +10,11 @@ run:
 	cat epilog.ll >> prog.ll
 	cat prog.ll
 	llvm-as prog.ll -f
+	opt -mem2reg -instcombine -stats prog.bc > optimized_prog.bc
+	mv optimized_prog.bc prog.bc
+	llc prog.bc -f
+	gcc prog.s -o prog
+	./prog
 clean:
 	\rm *.hi
 	\rm *.o

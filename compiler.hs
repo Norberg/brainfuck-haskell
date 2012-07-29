@@ -1,6 +1,7 @@
+import Text.Printf
 
 compile str = do
-	let code = rec str 10
+	let code = rec str 0
 	writeFile "test/helloworld.ll" (unlines code)
 
 rec :: String -> Int -> [String]
@@ -13,28 +14,28 @@ rec str temp
 
 --ptr++
 translate :: Char -> Int -> (String, Int)	
-translate '>' temp = (unlines["%"++ show temp ++ " = load i8** %ptr",
-	"%"++ show (temp+1) ++" = getelementptr inbounds i8* %"++ show temp ++", i32 1",
-	"store i8* %" ++ show (temp+2) ++ ", i8** %ptr"], temp+2)
+translate '>' temp = (unlines[ printf "%%%d = load i8** %%ptr" temp,
+	printf "%%%d = getelementptr inbounds i8* %%%d, i32 1" (temp+1) temp,
+	printf "store i8* %%%d, i8** %%ptr" (temp+1)], temp+2)
 translate '<' temp  = ("ptr--", temp+0)
 --(*ptr)++
-translate '+' temp = (unlines["%3 = load i8** %ptr",
-	"%4 = load i8* %3",
-	"%5 = add nsw i8 %4, 1",
-	"store i8 %5, i8* %3"], temp+3)
+translate '+' temp = (unlines[printf "%%%d = load i8** %%ptr" temp,
+	printf "%%%d = load i8* %%%d" (temp+1) temp,
+	printf "%%%d = add nsw i8 %%%d, 1" (temp+2) (temp+1),
+	printf "store i8 %%%d, i8* %%%d" (temp+2) temp], temp+3)
 translate '-' temp = ("(*ptr)--",  temp+0)
 --putchar(*ptr)
-translate '.' temp = (unlines ["%6 = load i8** %ptr",
-	"%7 = load i8* %6",
-	"%8 = call i32 @putchar(i8 %7)"], temp+3)
+translate '.' temp = (unlines [printf "%%%d = load i8** %%ptr" temp,
+	printf "%%%d = load i8* %%%d" (temp+1) temp,
+	printf "%%%d = call i32 @putchar(i8 %%%d)" (temp+2) (temp+1)], temp+3)
 --(*ptr) = getchar()
 translate ',' temp = ("(*ptr) = getchar()", temp+0)
 --while (*ptr){
 translate '[' temp = ("while (*ptr){", temp+0)
 --}
 translate ']' temp = ("}", temp+0)
-translate c temp = ("noop", temp+0)	
+translate c temp = ("", temp+0)	
 
 main = do  
-    contents <- readFile "test/helloworld.bf"  
+    contents <- readFile "test/42.bf"  
     compile contents 
