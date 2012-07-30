@@ -13,8 +13,9 @@ run:
 	opt -mem2reg -instcombine -stats prog.bc > optimized_prog.bc
 	mv optimized_prog.bc prog.bc
 	llc prog.bc -f
+	wc -l prog.s
 	gcc prog.s -o prog
-	./prog
+	time ./prog
 clean:
 	\rm *.hi
 	\rm *.o

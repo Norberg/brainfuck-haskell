@@ -1,4 +1,5 @@
 declare i32 @putchar(i8 zeroext) nounwind
+declare i8 @getchar()
 @data = global [30000 x i8] zeroinitializer
 define i32 @main() nounwind {
 entry:

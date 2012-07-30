@@ -37,7 +37,9 @@ translate '.' temp labels = (unlines [printf "%%%d = load i8** %%ptr" temp,
 	printf "%%%d = load i8* %%%d" (temp+1) temp,
 	printf "%%%d = call i32 @putchar(i8 %%%d)" (temp+2) (temp+1)], temp+3, labels)
 --(*ptr) = getchar()
-translate ',' temp labels = ("(*ptr) = getchar()", temp+0, labels)
+translate ',' temp labels = (unlines [printf "%%%d = call i8 @getchar()" temp,
+	printf "%%%d = load i8** %%ptr" (temp+1),
+	printf "store i8 %%%d, i8* %%%d" temp (temp+1)], temp+2, labels)
 --while (*ptr){
 translate '[' temp labels = (unlines [printf "br label %%beginLoop%d" temp,
 	printf "beginLoop%d:" temp,
