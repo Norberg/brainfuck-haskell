@@ -1,0 +1,10 @@
+Dependencys
+GHC
+LLVM
+
+Build compiler:
+make
+
+Run and build brainfuck:
+make run --will build and run test/helloworld.bf
+make run prog="test/squares.bf --will build and run test/squares.bf

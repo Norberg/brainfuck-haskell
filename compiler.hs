@@ -1,3 +1,4 @@
+import System.Environment
 import Text.Printf
 
 compile str = do
@@ -53,6 +54,7 @@ translate ']' temp labels = (unlines [printf "br label %%beginLoop%d" (last labe
 
 translate c temp labels = ("", temp+0, labels)	
 
-main = do  
-    contents <- readFile "test/helloworld.bf"  
-    compile contents 
+main = do
+	argv <- getArgs
+	contents <- readFile (head argv)
+	compile contents 
