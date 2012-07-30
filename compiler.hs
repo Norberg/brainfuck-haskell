@@ -46,8 +46,6 @@ translate '[' temp labels = (unlines [printf "br label %%beginLoop%d" temp,
 	printf "%%%d = icmp eq i8 %%%d, 0" (temp+2) (temp+1),
 	printf "br i1 %%%d, label %%endLoop%d, label %%%d" (temp+2) temp (temp+3)], temp+4, labels ++ [temp])
 --}
--- fundera ut hur labels ska genereras. behöver [ peka på ] samtidigt som ] pekar på [ ???
--- 
 translate ']' temp labels = (unlines [printf "br label %%beginLoop%d" (last labels),
 	printf "br label %%endLoop%d" (last labels),
 	printf  "endLoop%d:" (last labels)],temp+1, init labels)
