@@ -12,11 +12,11 @@ run:
 	llvm-as prog.ll -f
 	opt -mem2reg -instcombine -stats prog.bc > optimized_prog.bc
 	mv optimized_prog.bc prog.bc
-	llc prog.bc -f
+	llc prog.bc
 	wc -l prog.s
 	gcc prog.s -o prog
 	time ./prog
 clean:
 	\rm *.hi
 	\rm *.o
-	
+
