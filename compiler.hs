@@ -19,7 +19,8 @@ type Label = String
 data Instruction = LoadByteValue Dest Src
          | LoadByteRef Dest Src
          | StoreByte Dest Src
-         | GetPtr Dest Src
+         | StorePtr Dest Src
+         | GetPtr Dest Src Int
          | AddByte Dest Src Int
          | SubByte Dest Src Int
          | CallPutChar Src
@@ -54,6 +55,13 @@ nextLabel str = do
 	put new_state
 	return $ str ++ show next_label
 
+currentLabel ::  String -> State CompilerState Label
+currentLabel str = do
+	state <- get
+	let label_stack = labelStack state
+	let current_label = head label_stack
+	return $ str ++ show current_label
+
 popLabel :: String -> State CompilerState String
 popLabel str = do
 	state <- get
@@ -78,9 +86,12 @@ getInstructions = do
 
 compile str = do
 	let ast = map charToTerm str
-	putStrLn $ show ast
+	--putStrLn $ show ast
 	let instrs = evalState (compileAst ast) initState
-	putStrLn $ show $ reverse instrs
+	let code = map instrToAsm $ reverse instrs
+	--putStrLn $ show instrs
+	--putStrLn $ show code
+	writeFile "test/helloworld.ll" (unlines code)
 
 compileAst :: [Term] -> State CompilerState [Instruction]
 compileAst terms = do
@@ -94,26 +105,98 @@ transform (Add n:terms) = do
 	ref <- nextTemp
 	org <- nextTemp
 	res <- nextTemp
-	emit (LoadByteRef ref ptr)
-	emit (LoadByteValue org ref)
-	emit (AddByte res org n)
-	emit (StoreByte ref res)
+	emit $ LoadByteRef ref ptr
+	emit $ LoadByteValue org ref
+	emit $ AddByte res org n
+	emit $ StoreByte ref res
 	evaluated <- transform terms
 	return evaluated
 
---translate '+' temp labels = (unlines[printf "%%%d = load i8** %%ptr" temp,
---	printf "%%%d = load i8* %%%d" (temp+1) temp,
---	printf "%%%d = add nsw i8 %%%d, 1" (temp+2) (temp+1),
---	printf "store i8 %%%d, i8* %%%d" (temp+2) temp], temp+3, labels)
-transform (not_implemented:terms) = do
+transform (Sub n:terms) = do
+	let ptr = StrAddr "ptr"
+	ref <- nextTemp
+	org <- nextTemp
+	res <- nextTemp
+	emit $ LoadByteRef ref ptr
+	emit $ LoadByteValue org ref
+	emit $ SubByte res org n
+	emit $ StoreByte ref res
+	evaluated <- transform terms
+	return evaluated
+
+transform (PutChar : terms) = do
+	let ptr = StrAddr "ptr"
+	ref <- nextTemp
+	val <- nextTemp
+	dummy <- nextTemp
+	emit $ LoadByteRef ref ptr
+	emit $ LoadByteValue val ref
+	emit $ CallPutChar val
+	evaluated <- transform terms
+	return evaluated
+
+transform (GetChar : terms) = do
+	let ptr = StrAddr "ptr"
+	val <- nextTemp
+	ref <- nextTemp
+	emit $ CallGetChar val
+	emit $ LoadByteRef ref ptr
+	emit $ StoreByte ref val
+	evaluated <- transform terms
+	return evaluated
+
+transform (PtrAdd n : terms) = do
+	let ptr = StrAddr "ptr"
+	ref <- nextTemp
+	val <- nextTemp
+	emit $ LoadByteRef ref ptr
+	emit $ GetPtr val ref n
+	emit $ StorePtr ptr val
+	evaluated <- transform terms
+	return evaluated
+
+transform (PtrSub n : terms) = do
+	let ptr = StrAddr "ptr"
+	ref <- nextTemp
+	val <- nextTemp
+	emit $ LoadByteRef ref ptr
+	emit $ GetPtr val ref (-n)
+	emit $ StorePtr ptr val
+	evaluated <- transform terms
+	return evaluated
+
+transform (BeginLoop : terms) = do
+	let ptr = StrAddr "ptr"
+	begin <- nextLabel "beginLoop"
+	end <- currentLabel "endLoop"
+	continue <- currentLabel "continueLoop"
+	ref <- nextTemp
+	val <- nextTemp
+	res <- nextTemp
+	emit $ Branch begin
+	emit $ DefineLabel begin
+	emit $ LoadByteRef ref ptr
+	emit $ LoadByteValue val ref
+	emit $ CompareByte res val 0
+	emit $ ConditionalBranch res end continue
+	emit $ DefineLabel continue
+	evaluated <- transform terms
+	return evaluated
+
+transform (EndLoop : terms) = do
+	let ptr = StrAddr "ptr"
+	end <- currentLabel "endLoop"
+	begin <- popLabel "beginLoop"
+	emit $ Branch begin
+	emit $ DefineLabel end
+	evaluated <- transform terms
+	return evaluated
+
+transform (NoOp:terms) = do
 	evaluated <- transform terms
 	return evaluated
 
 transform [] = return ()
-
---compile str = do
---	let code = rec str 0 []
---	writeFile "test/helloworld.ll" (unlines code)
 
 charToTerm :: Char -> Term
 charToTerm '+' = Add 1
@@ -126,56 +209,29 @@ charToTerm '[' = BeginLoop
 charToTerm ']' = EndLoop
 charToTerm x = NoOp
 
-{-
-rec :: String -> Int -> [Int]-> [String]
-rec str temp label
-	| str == [] = []
-	| otherwise = code where
-	(code1, nextTemp, nextLabel) = translate (head str) temp label
-	codeN = (rec (tail str) nextTemp nextLabel)
-	code = [code1] ++ codeN
+asmAddr :: Addr -> String
+asmAddr (Temp n) = '%' : show n
+asmAddr (StrAddr addr) = '%' : addr
 
---ptr++
-translate :: Char -> Int -> [Int] -> (String, Int, [Int])
-translate '>' temp labels = (unlines[ printf "%%%d = load i8** %%ptr" temp,
-	printf "%%%d = getelementptr inbounds i8* %%%d, i32 1" (temp+1) temp,
-	printf "store i8* %%%d, i8** %%ptr" (temp+1)], temp+2, labels)
---ptr--
-translate '<' temp labels = (unlines[ printf "%%%d = load i8** %%ptr" temp,
-	printf "%%%d = getelementptr inbounds i8* %%%d, i32 -1" (temp+1) temp,
-	printf "store i8* %%%d, i8** %%ptr" (temp+1)], temp+2, labels)
---(*ptr)++
-translate '+' temp labels = (unlines[printf "%%%d = load i8** %%ptr" temp,
-	printf "%%%d = load i8* %%%d" (temp+1) temp,
-	printf "%%%d = add nsw i8 %%%d, 1" (temp+2) (temp+1),
-	printf "store i8 %%%d, i8* %%%d" (temp+2) temp], temp+3, labels)
---(*ptr)--
-translate '-' temp labels = (unlines[printf "%%%d = load i8** %%ptr" temp,
-	printf "%%%d = load i8* %%%d" (temp+1) temp,
-	printf "%%%d = sub nsw i8 %%%d, 1" (temp+2) (temp+1),
-	printf "store i8 %%%d, i8* %%%d" (temp+2) temp], temp+3, labels)
---putchar(*ptr)
-translate '.' temp labels = (unlines [printf "%%%d = load i8** %%ptr" temp,
-	printf "%%%d = load i8* %%%d" (temp+1) temp,
-	printf "%%%d = call i32 @putchar(i8 %%%d)" (temp+2) (temp+1)], temp+3, labels)
---(*ptr) = getchar()
-translate ',' temp labels = (unlines [printf "%%%d = call i8 @getchar()" temp,
-	printf "%%%d = load i8** %%ptr" (temp+1),
-	printf "store i8 %%%d, i8* %%%d" temp (temp+1)], temp+2, labels)
---while (*ptr){
-translate '[' temp labels = (unlines [printf "br label %%beginLoop%d" temp,
-	printf "beginLoop%d:" temp,
-	printf "%%%d = load i8** %%ptr" (temp),
-	printf "%%%d = load i8* %%%d" (temp+1) (temp),
-	printf "%%%d = icmp eq i8 %%%d, 0" (temp+2) (temp+1),
-	printf "br i1 %%%d, label %%endLoop%d, label %%%d" (temp+2) temp (temp+3)], temp+4, labels ++ [temp])
-translate ']' temp labels = (unlines [printf "br label %%beginLoop%d" (last labels),
-	printf "br label %%endLoop%d" (last labels),
-	printf  "endLoop%d:" (last labels)],temp+1, init labels)
+asmAssign :: Addr -> String -> Addr -> String
+asmAssign dest instr src = (asmAddr dest) ++ " = " ++ instr ++ " " ++ (asmAddr src)
 
-translate c temp labels = ("", temp+0, labels)
+instrToAsm :: Instruction -> String
+instrToAsm (LoadByteRef dest src) = asmAssign dest "load i8**" src
+instrToAsm (LoadByteValue dest src) = asmAssign dest  "load i8*" src
+instrToAsm (AddByte dest src n) = (asmAssign dest "add nsw i8"  src) ++ ", " ++ (show n)
+instrToAsm (SubByte dest src n) = (asmAssign dest "sub nsw i8"  src) ++ ", " ++ (show n)
+instrToAsm (StoreByte dest src) = "store i8 " ++ (asmAddr src) ++ ", i8*" ++ (asmAddr dest)
+instrToAsm (StorePtr dest src) = "store i8* " ++ (asmAddr src) ++ ", i8**" ++ (asmAddr dest)
+instrToAsm (CallPutChar src) = "call i32 @putchar(i8 " ++ (asmAddr src) ++ ")"
+instrToAsm (CallGetChar dest) = (asmAddr dest) ++ " = call i8 @getchar()"
+instrToAsm (GetPtr dest src n) = (asmAssign dest "getelementptr inbounds i8*" src) ++ ", i32 " ++
+	show (n)
+instrToAsm (DefineLabel label) = label ++ ":"
+instrToAsm (CompareByte dest src val) = (asmAssign dest "icmp eq i8" src) ++ ", " ++ show val
+instrToAsm (ConditionalBranch val true false) = "br i1 " ++ (asmAddr val) ++ ", " ++ "label %" ++ true ++ ", label %" ++ false
+instrToAsm (Branch label) = "br label %" ++ label
 
---}
 main = do
 	argv <- getArgs
 	contents <- readFile (head argv)
